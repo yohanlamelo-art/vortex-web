@@ -1,0 +1,57 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  margin: 0;
+}
+
+/* ---------- Animations VORTEX ---------- */
+@keyframes vortexFloat {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-16px); }
+}
+@keyframes vortexBlob1 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(24px, -32px) scale(1.15); }
+}
+@keyframes vortexBlob2 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(-28px, 22px) scale(1.12); }
+}
+
+.vortex-float {
+  animation: vortexFloat 4.5s ease-in-out infinite;
+}
+.vortex-blob-1 {
+  animation: vortexBlob1 9s ease-in-out infinite;
+}
+.vortex-blob-2 {
+  animation: vortexBlob2 11s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vortex-float, .vortex-blob-1, .vortex-blob-2 {
+    animation: none;
+  }
+}
+
+/* ---------- Touches premium ---------- */
+.premium-glow {
+  box-shadow: 0 12px 40px -10px rgba(108, 43, 217, 0.45), 0 2px 8px -2px rgba(0, 0, 0, 0.3);
+}
+.premium-glow-gold {
+  box-shadow: 0 10px 30px -10px rgba(212, 175, 55, 0.4);
+}
+.premium-text {
+  background: linear-gradient(90deg, #F2EEFB, #D4AF37 90%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.premium-border {
+  border: 1px solid transparent;
+  background-image: linear-gradient(#130D1D, #130D1D), linear-gradient(135deg, rgba(108,43,217,0.6), rgba(212,175,55,0.3));
+  background-origin: border-box;
+  background-clip: padding-box, border-box;
+}
