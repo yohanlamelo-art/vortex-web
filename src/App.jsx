@@ -462,6 +462,9 @@ function TransactionRow({ t, currency = "XOF" }) {
       </div>
       <p className={`text-sm font-semibold tabular-nums ${isIn ? "text-[#2E9E83]" : "text-[#E0654A]"}`}>{isIn ? "+" : "-"}{fmtCur(t.amount, currency)}</p>
     </div>
+  );
+}
+
 function WalletScreen({ balance, transactions, onBack, openDeposit, openWithdraw, autoOpen, loadingTx, t, currency }) {
   useEffect(() => { if (autoOpen === "deposit") openDeposit(); }, []); // eslint-disable-line
   return (
