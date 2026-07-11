@@ -1,10 +1,12 @@
 import React, { useState, useRef, useEffect } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { LineChart, Line, ResponsiveContainer, YAxis } from "recharts";
 import {
   Home, Wallet as WalletIcon, ShoppingBag, User, ArrowDownLeft, ArrowUpRight,
   Plus, X, Check, ChevronRight, BookOpen, GraduationCap, FileText,
   Smartphone, Loader2, ArrowLeft, Search, Star, RotateCcw, PlayCircle,
   CheckCircle2, Circle, ChevronLeft, Download, Sparkles, Send, Users,
-  Heart, MessageCircle, UserPlus, UserCheck, LogOut, AlertTriangle
+  Heart, MessageCircle, UserPlus, UserCheck, LogOut, AlertTriangle, Award
 } from "lucide-react";
 
 // ---------- Config ----------
@@ -17,11 +19,6 @@ const CURRENCY_KEY = "vortex-currency-v1";
 const fmt = (n) => n.toLocaleString("fr-FR").replace(/,/g, " ") + " F";
 
 // ---------- Multi-devise ----------
-// Tous les montants sont stockés et réellement transigés en XOF côté backend
-// (le Wallet, les achats, les commissions restent en XOF). Ceci n'est qu'une
-// couche d'affichage pour aider les utilisateurs d'autres pays à se repérer.
-// Taux approximatifs et fixes (pas de connexion à une API payante) — à mettre
-// à jour manuellement de temps en temps si les taux bougent significativement.
 const CURRENCIES = {
   XOF: { label: "Franc CFA (XOF)", symbol: "F", rate: 1, decimals: 0 },
   XAF: { label: "Franc CFA (XAF)", symbol: "F", rate: 1, decimals: 0 },
@@ -39,9 +36,6 @@ function fmtCur(amountXof, currency = "XOF") {
 }
 
 // ---------- Multi-langue ----------
-// Couverture actuelle : navigation, connexion, accueil, wallet, market, profil.
-// Le contenu des produits (titres/descriptions) et VORTEX AI restent en
-// français pour l'instant — traduire chaque contenu est un chantier séparé.
 const TRANSLATIONS = {
   fr: {
     nav_home: "Accueil", nav_wallet: "Wallet", nav_market: "Market", nav_community: "Communauté", nav_profile: "Profil",
@@ -103,6 +97,75 @@ async function api(path, { method = "GET", token, body } = {}) {
   return data;
 }
 
+// ---------- Retour sensoriel (vibration + son synthétisé) ----------
+function vibrate(pattern = 15) {
+  try { navigator.vibrate?.(pattern); } catch (e) { /* non supporté, silencieux */ }
+}
+
+let sharedAudioCtx = null;
+function playChime(kind = "success") {
+  try {
+    if (!sharedAudioCtx) sharedAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const ctx = sharedAudioCtx;
+    const notes = kind === "success" ? [660, 880] : [440];
+    notes.forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+      const start = ctx.currentTime + i * 0.09;
+      gain.gain.exponentialRampToValueAtTime(0.06, start + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.25);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(start);
+      osc.stop(start + 0.3);
+    });
+  } catch (e) { /* Web Audio indisponible, silencieux */ }
+}
+
+// ---------- Niveaux créateurs (basés sur les vraies ventes) ----------
+const LEVELS = [
+  { min: 0, label: "Débutant", color: "#8B8B9A" },
+  { min: 11, label: "Confirmé", color: "#2E9E83" },
+  { min: 101, label: "Expert", color: "#6C2BD9" },
+  { min: 1001, label: "Élite", color: "#D4AF37" },
+];
+function levelFor(sales) {
+  return [...LEVELS].reverse().find((l) => sales >= l.min) || LEVELS[0];
+}
+
+// ---------- Petit champ de particules décoratif ----------
+function ParticleField({ count = 14 }) {
+  const particles = useRef(
+    Array.from({ length: count }, (_, i) => ({
+      left: `${Math.round((i * 137.5) % 100)}%`,
+      delay: `${(i % count) * (7 / count)}s`,
+      duration: `${6 + (i % 5)}s`,
+    }))
+  ).current;
+  return (
+    <div className="absolute inset-0 overflow-hidden pointer-events-none">
+      {particles.map((p, i) => (
+        <span key={i} className="vortex-particle" style={{ left: p.left, animationDelay: p.delay, animationDuration: p.duration }} />
+      ))}
+    </div>
+  );
+}
+
+// ---------- Écrans "skeleton" (chargement) ----------
+function SkeletonRow() {
+  return (
+    <div className="flex items-center gap-3 bg-[#1C1626] border border-white/5 rounded-2xl p-3.5">
+      <div className="w-12 h-12 rounded-xl vortex-skeleton shrink-0" />
+      <div className="flex-1 min-w-0 space-y-2">
+        <div className="h-3 w-3/4 rounded vortex-skeleton" />
+        <div className="h-2.5 w-1/2 rounded vortex-skeleton" />
+      </div>
+    </div>
+  );
+}
+
 // ---------- Small building blocks ----------
 
 function VortexMark({ size = 28, spinning = false }) {
@@ -155,7 +218,7 @@ function ProgressBar({ pct, color = "#2E9E83" }) {
 
 function AuthScreen({ onAuthed, lang, setLang }) {
   const t = useT(lang);
-  const [mode, setMode] = useState("login"); // login | register
+  const [mode, setMode] = useState("login");
   const [phone, setPhone] = useState("");
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
@@ -188,6 +251,7 @@ function AuthScreen({ onAuthed, lang, setLang }) {
         <div className="absolute -top-24 -left-16 w-72 h-72 rounded-full blur-3xl opacity-30 vortex-blob-1" style={{ background: "radial-gradient(circle, #6C2BD9, transparent 70%)" }} />
         <div className="absolute -bottom-28 -right-14 w-80 h-80 rounded-full blur-3xl opacity-25 vortex-blob-2" style={{ background: "radial-gradient(circle, #D4AF37, transparent 70%)" }} />
       </div>
+      <ParticleField count={16} />
       <button onClick={() => setLang(lang === "fr" ? "en" : "fr")} className="absolute top-4 right-4 z-10 text-[#F2EEFB]/50 text-xs border border-white/10 rounded-full px-3 py-1">
         {lang === "fr" ? "EN" : "FR"}
       </button>
@@ -247,7 +311,7 @@ function AuthScreen({ onAuthed, lang, setLang }) {
   );
 }
 
-// ---------- Content viewers (Academy / Library) — progression stockée localement ----------
+// ---------- Content viewers (Academy / Library) ----------
 
 function AcademyViewer({ product, progress, onToggleLesson, onClose }) {
   const lessons = product.lessons || [];
@@ -322,9 +386,6 @@ function LibraryViewer({ product, progress, onSetPage, onClose }) {
 
 // ---------- VORTEX AI ----------
 
-// Recommandation gratuite par mots-clés — aucune API payante requise.
-// Le vrai relais IA (src/services/ai.service.js côté backend) reste prêt
-// à être rebranché plus tard, une fois des crédits API disponibles.
 function matchProducts(query, products) {
   const q = query.toLowerCase();
   const words = q.split(/\s+/).filter((w) => w.length > 2);
@@ -367,7 +428,7 @@ function AIAssistant({ onClose, products }) {
     setMessages(nextMessages);
     setInput("");
     setLoading(true);
-    await new Promise((r) => setTimeout(r, 400)); // petit délai pour que ça ne semble pas instantané/robotique
+    await new Promise((r) => setTimeout(r, 400));
     setMessages((m) => [...m, { role: "assistant", content: localReply(text, products) }]);
     setLoading(false);
   };
@@ -405,8 +466,9 @@ function AIAssistant({ onClose, products }) {
 
 function HomeScreen({ balance, name, goTo, recent, syncing, t, currency }) {
   return (
-    <div className="pb-4">
-      <div className="px-5 pt-6 pb-2 flex items-center justify-between">
+    <div className="pb-4 relative">
+      <ParticleField count={8} />
+      <div className="px-5 pt-6 pb-2 flex items-center justify-between relative z-10">
         <div className="flex items-center gap-2.5">
           <VortexMark size={26} spinning={syncing} />
           <span className="premium-text font-bold tracking-widest text-sm">VORTEX</span>
@@ -419,7 +481,7 @@ function HomeScreen({ balance, name, goTo, recent, syncing, t, currency }) {
         <p className="text-[#F2EEFB]/50 text-sm">{t("home_greeting")} {name} 👋</p>
         <h2 className="text-[#F2EEFB] text-2xl font-semibold mt-0.5">{t("home_tagline")}</h2>
       </div>
-      <button onClick={() => goTo("wallet")} className="mx-5 mt-5 w-[calc(100%-2.5rem)] relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#1C1626] to-[#130D1D] premium-border premium-glow p-5 text-left group">
+      <button onClick={() => goTo("wallet")} className="mx-5 mt-5 w-[calc(100%-2.5rem)] relative overflow-hidden rounded-3xl vortex-glass premium-glow p-5 text-left group">
         <div className="absolute -right-6 -top-6 opacity-[0.12]"><VortexMark size={140} /></div>
         <p className="text-[#F2EEFB]/50 text-xs uppercase tracking-wider">{t("home_balance")}</p>
         <p className="premium-text text-3xl font-bold mt-1.5 tabular-nums">{fmtCur(balance, currency)}</p>
@@ -465,24 +527,75 @@ function TransactionRow({ t, currency = "XOF" }) {
   );
 }
 
+function VortexCard3D({ children }) {
+  const [tilt, setTilt] = useState({ x: 0, y: 0 });
+  const ref = useRef(null);
+
+  const handleMove = (clientX, clientY) => {
+    const el = ref.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const px = (clientX - rect.left) / rect.width - 0.5;
+    const py = (clientY - rect.top) / rect.height - 0.5;
+    setTilt({ x: py * -8, y: px * 10 });
+  };
+
+  return (
+    <motion.div
+      ref={ref}
+      initial={{ opacity: 0, y: 16 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4, ease: "easeOut" }}
+      onPointerMove={(e) => handleMove(e.clientX, e.clientY)}
+      onPointerLeave={() => setTilt({ x: 0, y: 0 })}
+      className="mx-5 relative overflow-hidden rounded-3xl vortex-glass premium-glow vortex-card-3d p-6"
+      style={{ transform: `perspective(800px) rotateX(${tilt.x}deg) rotateY(${tilt.y}deg)` }}
+    >
+      {children}
+    </motion.div>
+  );
+}
+
 function WalletScreen({ balance, transactions, onBack, openDeposit, openWithdraw, autoOpen, loadingTx, t, currency }) {
   useEffect(() => { if (autoOpen === "deposit") openDeposit(); }, []); // eslint-disable-line
+  const chartData = [...transactions].reverse().reduce((acc, tx) => {
+    const prev = acc.length ? acc[acc.length - 1].v : 0;
+    const delta = (tx.type === "DEPOSIT" || tx.type === "REFUND" || tx.type === "EARNING") ? tx.amount : -tx.amount;
+    acc.push({ v: Math.max(0, prev + delta) });
+    return acc;
+  }, []);
   return (
     <div className="pb-4">
       <ScreenHeader title={t("wallet_title")} subtitle={t("wallet_subtitle")} onBack={onBack} />
-      <div className="mx-5 relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#1C1626] to-[#130D1D] premium-border premium-glow p-6">
+      <VortexCard3D>
         <div className="absolute -right-8 -bottom-10 opacity-[0.1]"><VortexMark size={160} /></div>
+        <div className="flex items-center justify-between mb-1">
+          <p className="premium-text font-bold tracking-widest text-xs">VORTEX PREMIUM</p>
+          <div className="w-7 h-5 rounded bg-gradient-to-br from-[#D4AF37] to-[#6C2BD9] opacity-80" />
+        </div>
+        <p className="text-[#F2EEFB]/30 text-[11px] tracking-widest mb-3">•••• •••• •••• VRTX</p>
         <p className="text-[#F2EEFB]/50 text-xs uppercase tracking-wider">{t("wallet_available")}</p>
         <p className="premium-text text-4xl font-bold mt-2 tabular-nums">{fmtCur(balance, currency)}</p>
+        {chartData.length > 1 && (
+          <div className="h-10 -mx-1 mt-2 opacity-80">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={chartData}>
+                <YAxis hide domain={["dataMin", "dataMax"]} />
+                <Line type="monotone" dataKey="v" stroke="#D4AF37" strokeWidth={2} dot={false} isAnimationActive />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        )}
         <div className="mt-5 flex gap-3">
           <button onClick={openDeposit} className="flex-1 bg-[#6C2BD9] text-white text-sm font-semibold rounded-xl py-2.5 flex items-center justify-center gap-1.5 active:scale-[0.97] transition-transform premium-glow"><Plus size={16} /> {t("wallet_deposit")}</button>
           <button onClick={openWithdraw} className="flex-1 bg-white/10 text-[#F2EEFB] text-sm font-semibold rounded-xl py-2.5 flex items-center justify-center gap-1.5 active:scale-[0.97] transition-transform"><ArrowUpRight size={16} /> {t("wallet_withdraw")}</button>
         </div>
-      </div>
+        <p className="text-[#F2EEFB]/20 text-[10px] text-center mt-4">Carte virtuelle décorative — aperçu de ton solde, pas un moyen de paiement réel.</p>
+      </VortexCard3D>
       <div className="px-5 mt-6">
         <h3 className="text-[#F2EEFB] text-sm font-semibold mb-2">{t("wallet_history")}</h3>
         <div className="space-y-2">
-          {loadingTx && <Loader2 size={18} className="text-[#6C2BD9] animate-spin mx-auto my-4" />}
+          {loadingTx && <div className="space-y-2">{[1, 2, 3].map((i) => <SkeletonRow key={i} />)}</div>}
           {!loadingTx && transactions.length === 0 && <p className="text-[#F2EEFB]/40 text-sm py-4">Aucune transaction encore.</p>}
           {transactions.map((tx) => <TransactionRow key={tx.id} t={tx} currency={currency} />)}
         </div>
@@ -587,8 +700,8 @@ function MarketScreen({ onBack, balance, token, onBuy, purchasedIds, products, l
           ))}
         </div>
       </div>
-  );
-{loadingProducts && <Loader2 size={20} className="text-[#6C2BD9] animate-spin mx-auto my-8" />}
+
+      {loadingProducts && <div className="px-5 space-y-3 mt-1">{[1, 2, 3, 4].map((i) => <SkeletonRow key={i} />)}</div>}
 
       <div className="px-5 space-y-3 mt-1">
         {!loadingProducts && list.map((p) => {
@@ -627,7 +740,7 @@ function ProductSheet({ product, owned, balance, token, currency = "XOF", onClos
   const [error, setError] = useState("");
   const [rating, setRating] = useState(0);
   const [comment, setComment] = useState("");
-  const [reviewState, setReviewState] = useState("idle"); // idle | sending | done | error
+  const [reviewState, setReviewState] = useState("idle");
   const [reviewError, setReviewError] = useState("");
 
   const handleBuy = async () => {
@@ -779,7 +892,8 @@ function CommunityScreen({ token, onBack, onOpenShop }) {
               })}
             </div>
           </div>
-<div className="px-5">
+
+          <div className="px-5">
             <p className="text-[#F2EEFB]/50 text-xs mb-2">Fil d'actualité</p>
             <div className="space-y-3">
               {feed.length === 0 && <p className="text-[#F2EEFB]/40 text-sm py-8 text-center">Rien à afficher pour l'instant.</p>}
@@ -847,7 +961,17 @@ function CreatorShopScreen({ creatorId, onClose, currency = "XOF" }) {
                 {data.creator.logoUrl ? <img src={data.creator.logoUrl} alt="" className="w-full h-full object-cover" /> : data.creator.name.slice(0, 1).toUpperCase()}
               </div>
               <div className="min-w-0">
-                <p className="text-[#F2EEFB] font-semibold truncate">{data.creator.name}</p>
+                <div className="flex items-center gap-2">
+                  <p className="text-[#F2EEFB] font-semibold truncate">{data.creator.name}</p>
+                  {(() => {
+                    const lvl = levelFor(data.stats.totalSales);
+                    return (
+                      <span className="shrink-0 flex items-center gap-1 text-[10px] font-semibold rounded-full px-2 py-0.5" style={{ color: lvl.color, background: `${lvl.color}1A`, border: `1px solid ${lvl.color}40` }}>
+                        <Award size={10} /> {lvl.label}
+                      </span>
+                    );
+                  })()}
+                </div>
                 {data.creator.bio && <p className="text-[#F2EEFB]/50 text-xs mt-0.5">{data.creator.bio}</p>}
               </div>
             </div>
@@ -970,6 +1094,7 @@ function AdminScreen({ token, onBack, onProductCreated }) {
     </div>
   );
 }
+
 function ProfileScreen({ name, phone, balance, purchases, progress, isAdmin, onBack, onOpenContent, onLogout, onOpenAdmin, t, lang, setLang, currency, setCurrency }) {
   return (
     <div className="pb-4">
@@ -1067,14 +1192,14 @@ function BottomNav({ screen, goTo, t }) {
 
 export default function VortexApp() {
   const [booting, setBooting] = useState(true);
-  const [auth, setAuth] = useState(null); // { token, name, phone }
+  const [auth, setAuth] = useState(null);
   const [lang, setLangState] = useState("fr");
   const [currency, setCurrencyState] = useState("XOF");
   const [screen, setScreen] = useState("home");
   const [autoOpen, setAutoOpen] = useState(null);
   const [modal, setModal] = useState(null);
   const [viewing, setViewing] = useState(null);
-  const [viewingShop, setViewingShop] = useState(null); // creatorId
+  const [viewingShop, setViewingShop] = useState(null);
   const [adminOpen, setAdminOpen] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
   const [toast, setToast] = useState(null);
@@ -1090,7 +1215,6 @@ export default function VortexApp() {
 
   const showToast = (message, tone) => { setToast({ message, tone }); setTimeout(() => setToast(null), 2500); };
 
-  // Boot: charger le token sauvegardé + les données locales (progression/communauté)
   useEffect(() => {
     try {
       const savedAuth = localStorage.getItem(AUTH_KEY);
@@ -1130,7 +1254,6 @@ export default function VortexApp() {
     try { localStorage.removeItem(AUTH_KEY); } catch (e) { /* déjà absent */ }
   };
 
-  // Charger produits (public) dès que possible
   const refreshProducts = async () => {
     setLoadingProducts(true);
     try {
@@ -1145,7 +1268,6 @@ export default function VortexApp() {
 
   useEffect(() => { refreshProducts(); }, []); // eslint-disable-line
 
-  // Charger wallet + achats une fois connecté
   const refreshWallet = async () => {
     if (!auth) return;
     try {
@@ -1184,12 +1306,14 @@ export default function VortexApp() {
     const path = modal === "deposit" ? "/wallet/deposit" : "/wallet/withdraw";
     await api(path, { method: "POST", token: auth.token, body: { amount, provider: providerId, phone: auth.phone } });
     await Promise.all([refreshWallet(), refreshTransactions()]);
+    vibrate(20); playChime("success");
     showToast(modal === "deposit" ? "Dépôt effectué" : "Retrait effectué", "teal");
   };
 
   const handleBuy = async (product) => {
     await api(`/market/products/${product.id}/purchase`, { method: "POST", token: auth.token });
     await Promise.all([refreshWallet(), refreshPurchases()]);
+    vibrate([15, 40, 15]); playChime("success");
     showToast("Achat réussi — disponible dans Profil", "teal");
   };
 
@@ -1223,23 +1347,33 @@ export default function VortexApp() {
 
           {auth && (
             <>
-              {screen === "home" && <HomeScreen balance={balance} name={auth.name} goTo={goTo} recent={transactions} syncing={syncing} t={t} currency={currency} />}
-              {screen === "wallet" && (
-                <WalletScreen balance={balance} transactions={transactions} onBack={() => goTo("home")}
-                  openDeposit={() => setModal("deposit")} openWithdraw={() => setModal("withdraw")} autoOpen={autoOpen} loadingTx={loadingTx} t={t} currency={currency} />
-              )}
-              {screen === "market" && (
-                <MarketScreen onBack={() => goTo("home")} balance={balance} token={auth.token} onBuy={handleBuy} purchasedIds={purchasedIds}
-                  products={products} loadingProducts={loadingProducts} onOpenContent={setViewing} onOpenShop={setViewingShop} t={t} currency={currency} />
-              )}
-              {screen === "community" && (
-                <CommunityScreen token={auth.token} onBack={() => goTo("home")} onOpenShop={setViewingShop} />
-              )}
-              {screen === "profile" && (
-                <ProfileScreen name={auth.name} phone={auth.phone} balance={balance} purchases={purchases} progress={local.progress}
-                  isAdmin={auth.isAdmin} onBack={() => goTo("home")} onOpenContent={setViewing} onLogout={handleLogout} onOpenAdmin={() => setAdminOpen(true)}
-                  t={t} lang={lang} setLang={setLang} currency={currency} setCurrency={setCurrency} />
-              )}
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={screen}
+                  initial={{ opacity: 0, x: 12 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -12 }}
+                  transition={{ duration: 0.22, ease: "easeOut" }}
+                >
+                  {screen === "home" && <HomeScreen balance={balance} name={auth.name} goTo={goTo} recent={transactions} syncing={syncing} t={t} currency={currency} />}
+                  {screen === "wallet" && (
+                    <WalletScreen balance={balance} transactions={transactions} onBack={() => goTo("home")}
+                      openDeposit={() => setModal("deposit")} openWithdraw={() => setModal("withdraw")} autoOpen={autoOpen} loadingTx={loadingTx} t={t} currency={currency} />
+                  )}
+                  {screen === "market" && (
+                    <MarketScreen onBack={() => goTo("home")} balance={balance} token={auth.token} onBuy={handleBuy} purchasedIds={purchasedIds}
+                      products={products} loadingProducts={loadingProducts} onOpenContent={setViewing} onOpenShop={setViewingShop} t={t} currency={currency} />
+                  )}
+                  {screen === "community" && (
+                    <CommunityScreen token={auth.token} onBack={() => goTo("home")} onOpenShop={setViewingShop} />
+                  )}
+                  {screen === "profile" && (
+                    <ProfileScreen name={auth.name} phone={auth.phone} balance={balance} purchases={purchases} progress={local.progress}
+                      isAdmin={auth.isAdmin} onBack={() => goTo("home")} onOpenContent={setViewing} onLogout={handleLogout} onOpenAdmin={() => setAdminOpen(true)}
+                      t={t} lang={lang} setLang={setLang} currency={currency} setCurrency={setCurrency} />
+                  )}
+                </motion.div>
+              </AnimatePresence>
 
               {modal && <MoneyModal mode={modal} phone={auth.phone} onClose={() => setModal(null)} onConfirm={handleMoneyConfirm} />}
 
