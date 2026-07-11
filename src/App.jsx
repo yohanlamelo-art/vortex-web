@@ -1049,7 +1049,7 @@ function AdminScreen({ token, onBack, onProductCreated }) {
   const valid = title && description && price && category;
 
   return (
-    <div className="pb-8">
+    <div className="absolute inset-0 z-40 bg-[#0B0714] overflow-y-auto pb-8">
       <ScreenHeader title="Ajouter un produit" subtitle="Panneau administrateur" onBack={onBack} />
       <div className="px-5 space-y-3">
         <div>
