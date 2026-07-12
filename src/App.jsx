@@ -12,13 +12,12 @@ import {
 // ---------- Config ----------
 const API_BASE = "https://vortex-backenda.onrender.com";
 const AUTH_KEY = "vortex-auth-v1";
-const LOCAL_KEY = "vortex-local-v1"; // progress + community : pas encore côté serveur
+const LOCAL_KEY = "vortex-local-v1";
 const LANG_KEY = "vortex-lang-v1";
 const CURRENCY_KEY = "vortex-currency-v1";
 
 const fmt = (n) => n.toLocaleString("fr-FR").replace(/,/g, " ") + " F";
 
-// ---------- Multi-devise ----------
 const CURRENCIES = {
   XOF: { label: "Franc CFA (XOF)", symbol: "F", rate: 1, decimals: 0 },
   XAF: { label: "Franc CFA (XAF)", symbol: "F", rate: 1, decimals: 0 },
@@ -35,7 +34,6 @@ function fmtCur(amountXof, currency = "XOF") {
   return currency === "USD" ? `${c.symbol}${numStr}` : `${numStr} ${c.symbol}`;
 }
 
-// ---------- Multi-langue ----------
 const TRANSLATIONS = {
   fr: {
     nav_home: "Accueil", nav_wallet: "Wallet", nav_market: "Market", nav_community: "Communauté", nav_profile: "Profil",
@@ -69,6 +67,35 @@ function useT(lang) {
   return (key) => TRANSLATIONS[lang]?.[key] || TRANSLATIONS.fr[key] || key;
 }
 
+// ---------- Upload de fichiers (Cloudinary, gratuit) ----------
+const CLOUDINARY_CLOUD_NAME = "ijdj0tvy";
+const CLOUDINARY_UPLOAD_PRESET = "vortex_products";
+
+async function uploadFile(file, onProgress) {
+  return new Promise((resolve, reject) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
+
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/auto/upload`);
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable && onProgress) onProgress(Math.round((e.loaded / e.total) * 100));
+    };
+    xhr.onload = () => {
+      try {
+        const data = JSON.parse(xhr.responseText);
+        if (xhr.status >= 200 && xhr.status < 300 && data.secure_url) resolve(data.secure_url);
+        else reject(new Error(data.error?.message || "Échec de l'upload"));
+      } catch (e) {
+        reject(new Error("Réponse d'upload invalide"));
+      }
+    };
+    xhr.onerror = () => reject(new Error("Erreur réseau pendant l'upload"));
+    xhr.send(formData);
+  });
+}
+
 const CATEGORY_ICON = { ACADEMY: GraduationCap, LIBRARY: BookOpen, MARKET: FileText };
 const CATEGORY_LABEL = { ACADEMY: "Academy", LIBRARY: "Library", MARKET: "Market" };
 
@@ -79,7 +106,6 @@ const PROVIDERS = [
   { id: "MOOV", name: "Moov Money", color: "#0072BC" },
 ];
 
-// ---------- API helper ----------
 async function api(path, { method = "GET", token, body } = {}) {
   const headers = { "Content-Type": "application/json" };
   if (token) headers.Authorization = `Bearer ${token}`;
@@ -89,7 +115,7 @@ async function api(path, { method = "GET", token, body } = {}) {
     body: body ? JSON.stringify(body) : undefined,
   });
   let data = null;
-  try { data = await res.json(); } catch (e) { /* réponse vide */ }
+  try { data = await res.json(); } catch (e) { }
   if (!res.ok) {
     const message = data?.error?.formErrors?.[0] || data?.error || `Erreur ${res.status}`;
     throw new Error(typeof message === "string" ? message : "Erreur serveur");
@@ -97,9 +123,8 @@ async function api(path, { method = "GET", token, body } = {}) {
   return data;
 }
 
-// ---------- Retour sensoriel (vibration + son synthétisé) ----------
 function vibrate(pattern = 15) {
-  try { navigator.vibrate?.(pattern); } catch (e) { /* non supporté, silencieux */ }
+  try { navigator.vibrate?.(pattern); } catch (e) { }
 }
 
 let sharedAudioCtx = null;
@@ -121,10 +146,9 @@ function playChime(kind = "success") {
       osc.start(start);
       osc.stop(start + 0.3);
     });
-  } catch (e) { /* Web Audio indisponible, silencieux */ }
+  } catch (e) { }
 }
 
-// ---------- Niveaux créateurs (basés sur les vraies ventes) ----------
 const LEVELS = [
   { min: 0, label: "Débutant", color: "#8B8B9A" },
   { min: 11, label: "Confirmé", color: "#2E9E83" },
@@ -135,7 +159,6 @@ function levelFor(sales) {
   return [...LEVELS].reverse().find((l) => sales >= l.min) || LEVELS[0];
 }
 
-// ---------- Petit champ de particules décoratif ----------
 function ParticleField({ count = 14 }) {
   const particles = useRef(
     Array.from({ length: count }, (_, i) => ({
@@ -153,7 +176,6 @@ function ParticleField({ count = 14 }) {
   );
 }
 
-// ---------- Écrans "skeleton" (chargement) ----------
 function SkeletonRow() {
   return (
     <div className="flex items-center gap-3 bg-[#1C1626] border border-white/5 rounded-2xl p-3.5">
@@ -165,8 +187,6 @@ function SkeletonRow() {
     </div>
   );
 }
-
-// ---------- Small building blocks ----------
 
 function VortexMark({ size = 28, spinning = false }) {
   return (
@@ -213,8 +233,6 @@ function ProgressBar({ pct, color = "#2E9E83" }) {
     </div>
   );
 }
-
-// ---------- Auth ----------
 
 function AuthScreen({ onAuthed, lang, setLang }) {
   const t = useT(lang);
@@ -311,8 +329,6 @@ function AuthScreen({ onAuthed, lang, setLang }) {
   );
 }
 
-// ---------- Content viewers (Academy / Library) ----------
-
 function AcademyViewer({ product, progress, onToggleLesson, onClose }) {
   const lessons = product.lessons || [];
   const done = progress?.completedLessons || [];
@@ -384,10 +400,9 @@ function LibraryViewer({ product, progress, onSetPage, onClose }) {
   );
 }
 
-// ---------- VORTEX AI ----------
-
 function matchProducts(query, products) {
   const q = query.toLowerCase();
+  const words = query.toLowerCase();
   const words = q.split(/\s+/).filter((w) => w.length > 2);
   const scored = products
     .map((p) => {
@@ -461,8 +476,6 @@ function AIAssistant({ onClose, products }) {
     </div>
   );
 }
-
-// ---------- Screens ----------
 
 function HomeScreen({ balance, name, goTo, recent, syncing, t, currency }) {
   return (
@@ -557,7 +570,7 @@ function VortexCard3D({ children }) {
 }
 
 function WalletScreen({ balance, transactions, onBack, openDeposit, openWithdraw, autoOpen, loadingTx, t, currency }) {
-  useEffect(() => { if (autoOpen === "deposit") openDeposit(); }, []); // eslint-disable-line
+  useEffect(() => { if (autoOpen === "deposit") openDeposit(); }, []);
   const chartData = [...transactions].reverse().reduce((acc, tx) => {
     const prev = acc.length ? acc[acc.length - 1].v : 0;
     const delta = (tx.type === "DEPOSIT" || tx.type === "REFUND" || tx.type === "EARNING") ? tx.amount : -tx.amount;
@@ -602,7 +615,7 @@ function WalletScreen({ balance, transactions, onBack, openDeposit, openWithdraw
       </div>
     </div>
   );
-}
+      }
 
 function MoneyModal({ mode, phone, onClose, onConfirm }) {
   const [step, setStep] = useState("form");
@@ -848,17 +861,17 @@ function CommunityScreen({ token, onBack, onOpenShop }) {
         const map = {};
         creatorsData.forEach((c, i) => { map[c.id] = statuses[i].following; });
         setFollowStatus(map);
-      } catch (e) { /* écran vide si le serveur ne répond pas */ }
+      } catch (e) { }
       setLoading(false);
     })();
-  }, []); // eslint-disable-line
+  }, []);
 
   const toggleFollow = async (creatorId) => {
     try {
       const res = await api(`/creators/${creatorId}/follow`, { method: "POST", token });
       setFollowStatus((s) => ({ ...s, [creatorId]: res.following }));
       setCreators((cs) => cs.map((c) => (c.id === creatorId ? { ...c, followerCount: c.followerCount + (res.following ? 1 : -1) } : c)));
-    } catch (e) { /* silencieux */ }
+    } catch (e) { }
   };
 
   return (
@@ -1017,28 +1030,51 @@ function CreatorShopScreen({ creatorId, onClose, currency = "XOF" }) {
   );
 }
 
-function AdminScreen({ token, onBack, onProductCreated }) {
+function SellScreen({ token, onBack, onProductCreated }) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [price, setPrice] = useState("");
   const [category, setCategory] = useState("LIBRARY");
   const [fileUrl, setFileUrl] = useState("");
+  const [fileName, setFileName] = useState("");
+  const [uploadPct, setUploadPct] = useState(null);
+  const [uploadError, setUploadError] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [done, setDone] = useState(false);
+  const fileInputRef = useRef(null);
+
+  const handleFilePick = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setFileName(file.name);
+    setUploadError("");
+    setUploadPct(0);
+    try {
+      const url = await uploadFile(file, setUploadPct);
+      setFileUrl(url);
+      vibrate(15);
+    } catch (err) {
+      setUploadError(err.message || "Échec de l'upload");
+      setFileName("");
+    } finally {
+      setUploadPct(null);
+    }
+  };
 
   const submit = async () => {
     setError(""); setSaving(true);
     try {
-      await api("/admin/products", {
+      await api("/market/products", {
         method: "POST",
         token,
         body: { title, description, priceXof: Number(price), category, fileUrl: fileUrl || null },
       });
       setDone(true);
-      setTitle(""); setDescription(""); setPrice(""); setFileUrl("");
+      vibrate([15, 40, 15]); playChime("success");
+      setTitle(""); setDescription(""); setPrice(""); setFileUrl(""); setFileName("");
       onProductCreated?.();
-      setTimeout(() => setDone(false), 2000);
+      setTimeout(() => setDone(false), 2500);
     } catch (e) {
       setError(e.message || "Échec de la création");
     } finally {
@@ -1050,7 +1086,7 @@ function AdminScreen({ token, onBack, onProductCreated }) {
 
   return (
     <div className="absolute inset-0 z-40 bg-[#0B0714] overflow-y-auto pb-8">
-      <ScreenHeader title="Ajouter un produit" subtitle="Panneau administrateur" onBack={onBack} />
+      <ScreenHeader title="Vendre un produit" subtitle="Visible par tous, sans limite" onBack={onBack} />
       <div className="px-5 space-y-3">
         <div>
           <p className="text-[#F2EEFB]/50 text-xs mb-1.5">Titre</p>
@@ -1059,7 +1095,7 @@ function AdminScreen({ token, onBack, onProductCreated }) {
         </div>
         <div>
           <p className="text-[#F2EEFB]/50 text-xs mb-1.5">Description</p>
-          <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} placeholder="Décris le contenu..."
+          <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} placeholder="Décris ton produit ou service..."
             className="w-full bg-white/[0.04] border border-white/10 rounded-xl px-3.5 py-2.5 text-sm text-[#F2EEFB] outline-none placeholder:text-[#F2EEFB]/30" />
         </div>
         <div>
@@ -1071,6 +1107,7 @@ function AdminScreen({ token, onBack, onProductCreated }) {
               </button>
             ))}
           </div>
+          <p className="text-[#F2EEFB]/25 text-[10px] mt-1">Market couvre aussi bien les produits physiques (vêtements, objets) que numériques.</p>
         </div>
         <div>
           <p className="text-[#F2EEFB]/50 text-xs mb-1.5">Prix (FCFA)</p>
@@ -1078,24 +1115,93 @@ function AdminScreen({ token, onBack, onProductCreated }) {
             className="w-full bg-white/[0.04] border border-white/10 rounded-xl px-3.5 py-2.5 text-sm text-[#F2EEFB] outline-none placeholder:text-[#F2EEFB]/30" />
         </div>
         <div>
-          <p className="text-[#F2EEFB]/50 text-xs mb-1.5">Lien du fichier (optionnel)</p>
-          <input value={fileUrl} onChange={(e) => setFileUrl(e.target.value)} placeholder="https://raw.githubusercontent.com/..."
-            className="w-full bg-white/[0.04] border border-white/10 rounded-xl px-3.5 py-2.5 text-sm text-[#F2EEFB] outline-none placeholder:text-[#F2EEFB]/30" />
-          <p className="text-[#F2EEFB]/30 text-[11px] mt-1">Uploade le PDF sur ton dépôt GitHub `vortex-files`, colle ici le lien "raw" du fichier.</p>
+          <p className="text-[#F2EEFB]/50 text-xs mb-1.5">Fichier ou photo (optionnel)</p>
+          <input ref={fileInputRef} type="file" onChange={handleFilePick} className="hidden" accept="image/*,application/pdf,audio/*,video/*" />
+          <button onClick={() => fileInputRef.current?.click()} disabled={uploadPct !== null}
+            className="w-full bg-white/[0.04] border border-dashed border-white/15 rounded-xl px-3.5 py-4 text-sm text-[#F2EEFB]/60 flex flex-col items-center justify-center gap-1.5 disabled:opacity-50">
+            {uploadPct !== null ? (
+              <>
+                <Loader2 size={18} className="animate-spin text-[#6C2BD9]" />
+                <span className="text-xs">Envoi en cours… {uploadPct}%</span>
+              </>
+            ) : fileUrl ? (
+              <>
+                <CheckCircle2 size={18} className="text-[#2E9E83]" />
+                <span className="text-xs text-[#2E9E83] truncate max-w-full">{fileName}</span>
+              </>
+            ) : (
+              <>
+                <Download size={18} className="rotate-180" />
+                <span className="text-xs">Depuis ton téléphone (photo, PDF, audio...)</span>
+              </>
+            )}
+          </button>
+          {uploadError && <p className="text-[#E0654A] text-xs mt-1.5">{uploadError}</p>}
         </div>
 
         {error && <p className="text-[#E0654A] text-xs">{error}</p>}
-        {done && <p className="text-[#2E9E83] text-xs">Produit créé avec succès ✓</p>}
+        {done && <p className="text-[#2E9E83] text-xs">Produit publié — visible dans le Market et ta boutique 🎉</p>}
 
-        <button onClick={submit} disabled={!valid || saving} className="w-full bg-[#6C2BD9] disabled:opacity-30 text-white font-semibold rounded-xl py-3 premium-glow flex items-center justify-center gap-2 mt-2">
-          {saving ? <Loader2 size={16} className="animate-spin" /> : "Ajouter au catalogue"}
+        <button onClick={submit} disabled={!valid || saving || uploadPct !== null} className="w-full bg-[#6C2BD9] disabled:opacity-30 text-white font-semibold rounded-xl py-3 premium-glow flex items-center justify-center gap-2 mt-2">
+          {saving ? <Loader2 size={16} className="animate-spin" /> : "Publier"}
         </button>
       </div>
     </div>
   );
 }
 
-function ProfileScreen({ name, phone, balance, purchases, progress, isAdmin, onBack, onOpenContent, onLogout, onOpenAdmin, t, lang, setLang, currency, setCurrency }) {
+function StatCard({ label, value, icon: Icon }) {
+  return (
+    <div className="bg-[#1C1626] rounded-2xl p-4 premium-border">
+      <div className="flex items-center justify-between mb-1.5">
+        <p className="text-[#F2EEFB]/40 text-xs">{label}</p>
+        {Icon && <Icon size={14} className="text-[#6C2BD9]" />}
+      </div>
+      <p className="premium-text text-2xl font-bold tabular-nums">{value}</p>
+    </div>
+  );
+}
+
+function AdminStatsScreen({ token, onBack, currency }) {
+  const [stats, setStats] = useState(null);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      setLoading(true);
+      try {
+        const data = await api("/admin/stats", { token });
+        setStats(data);
+      } catch (e) {
+        setError(e.message || "Impossible de charger les statistiques");
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
+  return (
+    <div className="absolute inset-0 z-40 bg-[#0B0714] overflow-y-auto pb-8">
+      <ScreenHeader title="Statistiques VORTEX" subtitle="Vue d'ensemble de la plateforme" onBack={onBack} />
+      {loading && <div className="px-5 grid grid-cols-2 gap-3">{[1, 2, 3, 4].map((i) => <div key={i} className="h-20 rounded-2xl vortex-skeleton" />)}</div>}
+      {error && <p className="text-[#E0654A] text-sm text-center py-8">{error}</p>}
+      {stats && (
+        <div className="px-5 grid grid-cols-2 gap-3">
+          <StatCard label="Visites" value={stats.totalVisits} icon={Sparkles} />
+          <StatCard label="Utilisateurs inscrits" value={stats.totalUsers} icon={Users} />
+          <StatCard label="Vendeurs actifs" value={stats.totalCreators} icon={Award} />
+          <StatCard label="Produits publiés" value={stats.totalProducts} icon={ShoppingBag} />
+          <StatCard label="Ventes réalisées" value={stats.totalPurchases} icon={Check} />
+          <StatCard label="Commission VORTEX" value={fmtCur(stats.totalCommission, currency)} icon={WalletIcon} />
+        </div>
+      )}
+      <p className="text-[#F2EEFB]/25 text-[11px] text-center mt-6 px-5">Les "visites" comptent chaque ouverture de l'app, y compris par des personnes non connectées.</p>
+    </div>
+  );
+}
+
+function ProfileScreen({ name, phone, balance, purchases, progress, isAdmin, onBack, onOpenContent, onLogout, onOpenSell, onOpenAdmin, t, lang, setLang, currency, setCurrency }) {
   return (
     <div className="pb-4">
       <ScreenHeader title={t("profile_title")} onBack={onBack} />
@@ -1153,6 +1259,10 @@ function ProfileScreen({ name, phone, balance, purchases, progress, isAdmin, onB
         </div>
       </div>
       <div className="px-5">
+        <button onClick={onOpenSell} className="w-full flex items-center justify-center gap-2 bg-[#6C2BD9] text-white text-sm font-semibold rounded-xl py-3 mb-3 premium-glow">
+          <ShoppingBag size={14} /> Vendre un produit
+        </button>
+        <p className="text-[#F2EEFB]/25 text-[10px] text-center -mt-2 mb-3">Publie un contenu et tu apparais automatiquement dans la Communauté.</p>
         {isAdmin && (
           <button onClick={onOpenAdmin} className="w-full flex items-center justify-center gap-2 bg-[#6C2BD9]/10 text-[#6C2BD9] text-sm font-medium rounded-xl py-3 mb-3">
             <Sparkles size={14} /> {t("profile_admin")}
@@ -1188,8 +1298,6 @@ function BottomNav({ screen, goTo, t }) {
   );
 }
 
-// ---------- Root ----------
-
 export default function VortexApp() {
   const [booting, setBooting] = useState(true);
   const [auth, setAuth] = useState(null);
@@ -1201,6 +1309,7 @@ export default function VortexApp() {
   const [viewing, setViewing] = useState(null);
   const [viewingShop, setViewingShop] = useState(null);
   const [adminOpen, setAdminOpen] = useState(false);
+  const [sellOpen, setSellOpen] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
   const [toast, setToast] = useState(null);
 
@@ -1219,20 +1328,21 @@ export default function VortexApp() {
     try {
       const savedAuth = localStorage.getItem(AUTH_KEY);
       if (savedAuth) setAuth(JSON.parse(savedAuth));
-    } catch (e) { /* pas de session sauvegardée */ }
+    } catch (e) { }
     try {
       const savedLocal = localStorage.getItem(LOCAL_KEY);
       if (savedLocal) setLocal(JSON.parse(savedLocal));
-    } catch (e) { /* rien de sauvegardé encore */ }
+    } catch (e) { }
     try {
       const savedLang = localStorage.getItem(LANG_KEY);
       if (savedLang) setLangState(savedLang);
-    } catch (e) { /* défaut fr */ }
+    } catch (e) { }
     try {
       const savedCurrency = localStorage.getItem(CURRENCY_KEY);
       if (savedCurrency) setCurrencyState(savedCurrency);
-    } catch (e) { /* défaut XOF */ }
+    } catch (e) { }
     setBooting(false);
+    api("/analytics/visit", { method: "POST" }).catch(() => {});
   }, []);
 
   const setLang = (l) => { setLangState(l); try { localStorage.setItem(LANG_KEY, l); } catch (e) {} };
@@ -1241,17 +1351,17 @@ export default function VortexApp() {
 
   const persistLocal = (next) => {
     setLocal(next);
-    try { localStorage.setItem(LOCAL_KEY, JSON.stringify(next)); } catch (e) { /* silencieux */ }
+    try { localStorage.setItem(LOCAL_KEY, JSON.stringify(next)); } catch (e) { }
   };
 
   const handleAuthed = (data) => {
     setAuth(data);
-    try { localStorage.setItem(AUTH_KEY, JSON.stringify(data)); } catch (e) { /* silencieux */ }
+    try { localStorage.setItem(AUTH_KEY, JSON.stringify(data)); } catch (e) { }
   };
 
   const handleLogout = () => {
     setAuth(null);
-    try { localStorage.removeItem(AUTH_KEY); } catch (e) { /* déjà absent */ }
+    try { localStorage.removeItem(AUTH_KEY); } catch (e) { }
   };
 
   const refreshProducts = async () => {
@@ -1266,14 +1376,14 @@ export default function VortexApp() {
     }
   };
 
-  useEffect(() => { refreshProducts(); }, []); // eslint-disable-line
+  useEffect(() => { refreshProducts(); }, []);
 
   const refreshWallet = async () => {
     if (!auth) return;
     try {
       const bal = await api("/wallet/balance", { token: auth.token });
       setBalance(bal.balance);
-    } catch (e) { /* géré silencieusement, on garde le dernier solde connu */ }
+    } catch (e) { }
   };
 
   const refreshTransactions = async () => {
@@ -1282,7 +1392,7 @@ export default function VortexApp() {
     try {
       const tx = await api("/wallet/transactions", { token: auth.token });
       setTransactions(tx);
-    } catch (e) { /* silencieux */ }
+    } catch (e) { }
     setLoadingTx(false);
   };
 
@@ -1291,14 +1401,14 @@ export default function VortexApp() {
     try {
       const p = await api("/market/me/purchases", { token: auth.token });
       setPurchases(p);
-    } catch (e) { /* silencieux */ }
+    } catch (e) { }
   };
 
   useEffect(() => {
     if (!auth) return;
     setSyncing(true);
     Promise.all([refreshWallet(), refreshTransactions(), refreshPurchases()]).finally(() => setSyncing(false));
-  }, [auth]); // eslint-disable-line
+  }, [auth]);
 
   const goTo = (s, sub) => { setScreen(s); setAutoOpen(sub || null); };
 
@@ -1369,7 +1479,7 @@ export default function VortexApp() {
                   )}
                   {screen === "profile" && (
                     <ProfileScreen name={auth.name} phone={auth.phone} balance={balance} purchases={purchases} progress={local.progress}
-                      isAdmin={auth.isAdmin} onBack={() => goTo("home")} onOpenContent={setViewing} onLogout={handleLogout} onOpenAdmin={() => setAdminOpen(true)}
+                      isAdmin={auth.isAdmin} onBack={() => goTo("home")} onOpenContent={setViewing} onLogout={handleLogout} onOpenSell={() => setSellOpen(true)} onOpenAdmin={() => setAdminOpen(true)}
                       t={t} lang={lang} setLang={setLang} currency={currency} setCurrency={setCurrency} />
                   )}
                 </motion.div>
@@ -1386,11 +1496,13 @@ export default function VortexApp() {
 
               {viewingShop && <CreatorShopScreen creatorId={viewingShop} onClose={() => setViewingShop(null)} currency={currency} />}
 
-              {adminOpen && <AdminScreen token={auth.token} onBack={() => setAdminOpen(false)} onProductCreated={refreshProducts} />}
+              {sellOpen && <SellScreen token={auth.token} onBack={() => setSellOpen(false)} onProductCreated={refreshProducts} />}
+
+              {adminOpen && <AdminStatsScreen token={auth.token} onBack={() => setAdminOpen(false)} currency={currency} />}
 
               {aiOpen && <AIAssistant onClose={() => setAiOpen(false)} products={products} />}
 
-              {!modal && !viewing && !viewingShop && !adminOpen && !aiOpen && (
+              {!modal && !viewing && !viewingShop && !sellOpen && !adminOpen && !aiOpen && (
                 <button onClick={() => setAiOpen(true)} className="fixed right-4 bottom-20 rounded-full bg-[#6C2BD9] premium-glow flex items-center justify-center active:scale-95 transition-transform z-30" style={{ width: 52, height: 52 }} aria-label="Ouvrir VORTEX AI">
                   <Sparkles size={22} className="text-white" />
                 </button>
