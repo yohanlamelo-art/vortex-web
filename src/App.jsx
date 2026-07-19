@@ -402,7 +402,6 @@ function LibraryViewer({ product, progress, onSetPage, onClose }) {
 
 function matchProducts(query, products) {
   const q = query.toLowerCase();
-  const words = query.toLowerCase();
   const words = q.split(/\s+/).filter((w) => w.length > 2);
   const scored = products
     .map((p) => {
